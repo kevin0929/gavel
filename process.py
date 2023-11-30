@@ -6,13 +6,15 @@ import numpy as np
 import pandas as pd
 import pywt
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler
+from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
+
+from utils.preprocess import filter
 
 # filter pandas warning msg
 warnings.filterwarnings("ignore")
 
 
-def process(data_path: str, json_path: str) -> None:
+def process(data_path: str, json_path: str, format: str) -> None:
     """_summary_
 
     Args:
@@ -22,7 +24,6 @@ def process(data_path: str, json_path: str) -> None:
 
     # transform csv file to dataframe and read json file
     df = pd.read_csv(data_path)
-    df.dropna(inplace=True)
 
     with open(json_path, "r") as file:
         time_series_dict = json.load(file)
@@ -46,6 +47,7 @@ def process(data_path: str, json_path: str) -> None:
 
     sensor_list = df["node_address"].unique()
 
+    # to use band pass filter to remove noise
     df = df[
         [
             "node_address",
@@ -59,6 +61,8 @@ def process(data_path: str, json_path: str) -> None:
             "label",
         ]
     ]
+
+    df.dropna(inplace=True)
 
     # config sliding window data parameter
     frequency = 5
@@ -93,8 +97,7 @@ def process(data_path: str, json_path: str) -> None:
             scaler = MinMaxScaler()
             x_data = scaler.fit_transform(x_data)
 
-            encoder = LabelEncoder()
-            y_data = encoder.fit_transform(y_data)
+            y_data = y_data.astype(int)
 
             columns = ["acc_x", "acc_y", "acc_z", "gyro_x", "gyro_y", "gyro_z"]
             x_data = pd.DataFrame(x_data, columns=columns)
@@ -115,36 +118,55 @@ def process(data_path: str, json_path: str) -> None:
     x_data = np.array(data_frame)
     y_data = np.array(label_frame)
 
-    # split dataset into train / test data
-    X_train, X_test, y_train, y_test = train_test_split(
-        x_data, y_data, test_size=0.2, random_state=42, shuffle=True
-    )
+    # if format is train, need to divide dataset into train and test
+    if format == "train":
+        # split dataset into train / test data
+        X_train, X_test, y_train, y_test = train_test_split(
+            x_data, y_data, test_size=0.2, random_state=42, shuffle=True
+        )
 
-    # use cwt to transform sensor data to image-based data
-    x_train = np.ndarray(shape=(X_train.shape[0], 60, 60, 6))
-    scale = range(1, 61)
-    wavelet = "gaus5"
-    for i in range(X_train.shape[0]):
-        for j in range(0, 6):
-            sig = X_train[i, :, j]
-            coeff, freq = pywt.cwt(sig, scale, wavelet)
-            coeff_ = coeff[:, :60]
-            # print(coeff)
-            x_train[i, :, :, j] = coeff_
+        # use cwt to transform sensor data to image-based data
+        x_train = np.ndarray(shape=(X_train.shape[0], 60, 60, 6))
+        scale = range(1, 61)
+        wavelet = "gaus5"
+        for i in range(X_train.shape[0]):
+            for j in range(0, 6):
+                sig = X_train[i, :, j]
+                coeff, freq = pywt.cwt(sig, scale, wavelet)
+                coeff_ = coeff[:, :60]
+                # print(coeff)
+                x_train[i, :, :, j] = coeff_
 
-    x_test = np.ndarray(shape=(X_test.shape[0], 60, 60, 6))
-    scale = range(1, 61)
-    wavelet = "gaus5"
-    for i in range(X_test.shape[0]):
-        for j in range(0, 6):
-            sig = X_test[i, :, j]
-            coeff, freq = pywt.cwt(sig, scale, wavelet)
-            coeff_ = coeff[:, :60]
-            x_test[i, :, :, j] = coeff_
+        x_test = np.ndarray(shape=(X_test.shape[0], 60, 60, 6))
+        scale = range(1, 61)
+        wavelet = "gaus5"
+        for i in range(X_test.shape[0]):
+            for j in range(0, 6):
+                sig = X_test[i, :, j]
+                coeff, freq = pywt.cwt(sig, scale, wavelet)
+                coeff_ = coeff[:, :60]
+                x_test[i, :, :, j] = coeff_
 
-    # save data into numpy type
-    np.savez("train_data.npz", x_train=x_train, y_train=y_train)
-    np.savez("test_data.npz", x_test=x_test, y_test=y_test)
+        # save data into numpy type
+        np.savez("train_data.npz", x_train=x_train, y_train=y_train)
+        np.savez("test_data.npz", x_test=x_test, y_test=y_test)
+
+    elif format == "validation":
+        # split data name into file name
+        filename = data_path.split(".")[0]
+
+        x_valid = np.ndarray(shape=(x_data.shape[0], 60, 60, 6))
+        scale = range(1, 61)
+        wavelet = "gaus5"
+        for i in range(x_data.shape[0]):
+            for j in range(0, 6):
+                sig = x_data[i, :, j]
+                coeff, freq = pywt.cwt(sig, scale, wavelet)
+                coeff_ = coeff[:, :60]
+                x_valid[i, :, :, j] = coeff_
+
+        # save data into numpy type
+        np.savez(f"{filename}.npz", x_valid=x_valid, y_valid=y_data)
 
 
 if __name__ == "__main__":
@@ -152,4 +174,4 @@ if __name__ == "__main__":
     json_path = "train_dataset.json"
 
     # start process data
-    process(data_path, json_path)
+    process(data_path, json_path, "train")
