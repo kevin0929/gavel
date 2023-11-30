@@ -37,7 +37,7 @@ def load_data(valid_data_path: str) -> TensorDataset:
     return valid_dataset
 
 
-def train(
+def validate(
     model,
     device,
     valid_loader,
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     model.eval()
 
     # start training
-    train(
+    validate(
         model=model,
         device=device,
         valid_loader=valid_loader,
