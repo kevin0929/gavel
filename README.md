@@ -20,7 +20,7 @@ conda activate gavel
 Install dependencies by `requirements.txt` in `python >= 3.9` environment, including `Pytorch >= 2.0`
 
 ```
-cd Gavel
+cd gavel
 pip install -r requirements.txt
 ```
 
